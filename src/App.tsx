@@ -373,6 +373,20 @@ export default function App() {
         </div>
       </header>
 
+      <div className="trustBar">
+        <span>🔒 Processed locally</span>
+        <span>☁️ No PDF uploads</span>
+        <span>💾 Nothing stored</span>
+
+        <a
+          href="https://github.com/shirazhashmi/pdf-two-up"
+          target="_blank"
+          rel="noreferrer"
+        >
+          ⌘ Open source
+        </a>
+      </div>
+
       {!pdfBytes ? (
 
         <label className="upload">
@@ -405,9 +419,13 @@ export default function App() {
             }}
           />
 
-          <small>
-            Your PDF never leaves your browser.
-          </small>
+          <div className="privacyNote">
+            <strong>Private by design</strong>
+            <span>
+              Your PDF is processed directly in your browser.
+              This app does not upload or store your document.
+            </span>
+          </div>
 
         </label>
 
@@ -601,6 +619,30 @@ export default function App() {
 
         </main>
       )}
+
+      <footer className="siteFooter">
+        <span>
+          Free & open-source PDF utility
+        </span>
+
+        <div className="footerLinks">
+          <a
+            href="https://shirazhashmi.github.io"
+            target="_blank"
+            rel="noreferrer"
+          >
+            Built by Shiraz Hashmi ↗
+          </a>
+
+          <a
+            href="https://github.com/shirazhashmi/pdf-two-up"
+            target="_blank"
+            rel="noreferrer"
+          >
+            GitHub ↗
+          </a>
+        </div>
+      </footer>
     </div>
   );
 }

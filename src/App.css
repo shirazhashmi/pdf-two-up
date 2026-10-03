@@ -255,3 +255,95 @@ hr {
     grid-template-columns: 1fr;
   }
 }
+
+.trustBar {
+  background: #ffffff;
+  border: 1px solid #e5e5e5;
+  border-radius: 14px;
+  padding: 12px 18px;
+  margin: -8px 0 22px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 22px;
+  flex-wrap: wrap;
+  font-size: 12px;
+  color: #555;
+}
+
+.trustBar span,
+.trustBar a {
+  white-space: nowrap;
+}
+
+.trustBar a {
+  color: #111;
+  font-weight: 600;
+  text-decoration: none;
+}
+
+.trustBar a:hover {
+  text-decoration: underline;
+}
+
+.privacyNote {
+  margin-top: 24px;
+  max-width: 430px;
+  background: #f7f7f7;
+  border: 1px solid #e7e7e7;
+  border-radius: 12px;
+  padding: 13px 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  text-align: center;
+}
+
+.privacyNote strong {
+  font-size: 12px;
+}
+
+.privacyNote span {
+  color: #777;
+  font-size: 11px;
+  line-height: 1.5;
+}
+
+.siteFooter {
+  margin-top: 35px;
+  padding: 24px 5px 10px;
+  border-top: 1px solid #e3e3e3;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 20px;
+  font-size: 12px;
+  color: #888;
+}
+
+.footerLinks {
+  display: flex;
+  gap: 18px;
+}
+
+.footerLinks a {
+  color: #444;
+  font-weight: 600;
+  text-decoration: none;
+}
+
+.footerLinks a:hover {
+  color: #000;
+}
+
+@media(max-width: 700px) {
+  .trustBar {
+    gap: 10px 16px;
+    justify-content: flex-start;
+  }
+
+  .siteFooter {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+}

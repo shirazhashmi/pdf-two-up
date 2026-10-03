@@ -4,13 +4,28 @@
 
 body {
   margin: 0;
-  font-family: Arial, sans-serif;
+  font-family:
+    Inter,
+    -apple-system,
+    BlinkMacSystemFont,
+    "Segoe UI",
+    sans-serif;
   background: #f4f5f7;
   color: #171717;
 }
 
+button,
+input {
+  font: inherit;
+}
+
+button {
+  border: 0;
+}
+
 .app {
   max-width: 1400px;
+  min-height: 100vh;
   margin: auto;
   padding: 25px;
 }
@@ -27,6 +42,7 @@ header > strong {
   color: white;
   padding: 16px;
   border-radius: 12px;
+  white-space: nowrap;
 }
 
 h1 {
@@ -37,10 +53,35 @@ h1 {
 header p {
   margin: 4px 0 0;
   color: #777;
+  font-size: 14px;
+}
+
+.trustBar {
+  background: #fff;
+  border: 1px solid #e4e4e4;
+  border-radius: 14px;
+  padding: 12px 18px;
+  margin: -8px 0 22px;
+  display: flex;
+  justify-content: center;
+  gap: 22px;
+  flex-wrap: wrap;
+  font-size: 12px;
+  color: #555;
+}
+
+.trustBar a {
+  color: #111;
+  font-weight: 700;
+  text-decoration: none;
+}
+
+.trustBar a:hover {
+  text-decoration: underline;
 }
 
 .upload {
-  height: 600px;
+  min-height: 590px;
   background: white;
   border: 2px dashed #bbb;
   border-radius: 22px;
@@ -49,6 +90,14 @@ header p {
   justify-content: center;
   flex-direction: column;
   cursor: pointer;
+  transition: 0.2s ease;
+  padding: 30px;
+  text-align: center;
+}
+
+.upload:hover {
+  border-color: #555;
+  transform: translateY(-1px);
 }
 
 .upload input {
@@ -67,7 +116,7 @@ header p {
 }
 
 .upload h2 {
-  margin-bottom: 5px;
+  margin: 20px 0 8px;
 }
 
 .upload p {
@@ -75,15 +124,33 @@ header p {
   color: #777;
 }
 
-.upload small {
-  margin-top: 20px;
-  color: #999;
+.privacyNote {
+  margin-top: 25px;
+  max-width: 460px;
+  background: #f7f7f7;
+  border: 1px solid #e6e6e6;
+  border-radius: 12px;
+  padding: 13px 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+
+.privacyNote strong {
+  font-size: 12px;
+}
+
+.privacyNote span {
+  color: #777;
+  font-size: 11px;
+  line-height: 1.5;
 }
 
 main {
   display: grid;
-  grid-template-columns: 1fr 350px;
+  grid-template-columns: 1fr 365px;
   gap: 20px;
+  align-items: start;
 }
 
 .preview,
@@ -101,12 +168,14 @@ aside {
   padding: 18px 22px;
   display: flex;
   justify-content: space-between;
+  gap: 15px;
   border-bottom: 1px solid #eee;
 }
 
 .previewTop h2 {
   margin: 0;
   font-size: 17px;
+  word-break: break-word;
 }
 
 .previewTop p {
@@ -115,15 +184,27 @@ aside {
   font-size: 13px;
 }
 
-button {
-  border: 0;
-  cursor: pointer;
+.previewTop button,
+.detect {
   border-radius: 9px;
   padding: 10px 13px;
+  cursor: pointer;
+  background: #eee;
+}
+
+.previewTop button:disabled,
+.detect:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
 }
 
 .paperArea {
-  background: #ddd;
+  background:
+    repeating-conic-gradient(
+      #eeeeee 0% 25%,
+      #e5e5e5 0% 50%
+    )
+    50% / 18px 18px;
   padding: 25px;
   min-height: 700px;
   display: flex;
@@ -134,7 +215,9 @@ button {
   position: relative;
   width: min(100%, 850px);
   align-self: flex-start;
-  box-shadow: 0 10px 35px #999;
+  box-shadow:
+    0 10px 35px
+    rgba(0, 0, 0, 0.2);
 }
 
 canvas {
@@ -146,12 +229,27 @@ canvas {
 .crop {
   position: absolute;
   border: 3px solid #2563eb;
-  background: rgba(37, 99, 235, .08);
+  background:
+    rgba(37, 99, 235, 0.08);
   pointer-events: none;
+}
+
+.crop span {
+  position: absolute;
+  top: -29px;
+  left: -3px;
+  background: #2563eb;
+  color: white;
+  padding: 5px 7px;
+  border-radius: 6px;
+  font-size: 11px;
+  white-space: nowrap;
 }
 
 aside {
   padding: 22px;
+  position: sticky;
+  top: 15px;
 }
 
 aside h2 {
@@ -161,6 +259,39 @@ aside h2 {
 .detect {
   width: 100%;
   margin-bottom: 12px;
+}
+
+.batchInfo {
+  background: #f5f7ff;
+  border: 1px solid #e0e5ff;
+  border-radius: 11px;
+  padding: 12px;
+  margin: 8px 0 17px;
+}
+
+.batchInfo strong {
+  font-size: 13px;
+}
+
+.batchInfo p {
+  color: #666;
+  font-size: 11px;
+  line-height: 1.5;
+  margin: 5px 0 9px;
+}
+
+.fileList {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.fileList span {
+  font-size: 10px;
+  color: #555;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .range {
@@ -174,9 +305,15 @@ aside h2 {
   font-size: 13px;
 }
 
+.range b {
+  font-size: 12px;
+  color: #666;
+}
+
 .range input {
   width: 100%;
   margin-top: 8px;
+  accent-color: #111;
 }
 
 hr {
@@ -193,13 +330,15 @@ hr {
   font-size: 13px;
 }
 
-.number span {
+.number > span {
   flex: 1;
 }
 
 .number input {
   width: 65px;
   padding: 8px;
+  border: 1px solid #ddd;
+  border-radius: 7px;
 }
 
 .fit {
@@ -232,6 +371,31 @@ hr {
   margin: 5px 0;
 }
 
+.progressWrap {
+  margin-top: 15px;
+}
+
+.progressTop {
+  display: flex;
+  justify-content: space-between;
+  font-size: 11px;
+  margin-bottom: 7px;
+}
+
+.progressTrack {
+  height: 8px;
+  border-radius: 999px;
+  background: #e5e5e5;
+  overflow: hidden;
+}
+
+.progressBar {
+  height: 100%;
+  background: #111;
+  border-radius: 999px;
+  transition: width 0.2s ease;
+}
+
 .generate {
   width: 100%;
   background: #111;
@@ -239,83 +403,33 @@ hr {
   padding: 14px;
   margin-top: 15px;
   font-weight: bold;
+  border-radius: 10px;
+  cursor: pointer;
+}
+
+.generate:hover:not(:disabled) {
+  background: #292929;
 }
 
 .generate:disabled {
-  opacity: .35;
+  opacity: 0.35;
+  cursor: not-allowed;
 }
 
 .status {
   text-align: center;
-  font-size: 12px;
-}
-
-@media(max-width: 900px) {
-  main {
-    grid-template-columns: 1fr;
-  }
-}
-
-.trustBar {
-  background: #ffffff;
-  border: 1px solid #e5e5e5;
-  border-radius: 14px;
-  padding: 12px 18px;
-  margin: -8px 0 22px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 22px;
-  flex-wrap: wrap;
-  font-size: 12px;
-  color: #555;
-}
-
-.trustBar span,
-.trustBar a {
-  white-space: nowrap;
-}
-
-.trustBar a {
-  color: #111;
-  font-weight: 600;
-  text-decoration: none;
-}
-
-.trustBar a:hover {
-  text-decoration: underline;
-}
-
-.privacyNote {
-  margin-top: 24px;
-  max-width: 430px;
-  background: #f7f7f7;
-  border: 1px solid #e7e7e7;
-  border-radius: 12px;
-  padding: 13px 16px;
-  display: flex;
-  flex-direction: column;
-  gap: 5px;
-  text-align: center;
-}
-
-.privacyNote strong {
-  font-size: 12px;
-}
-
-.privacyNote span {
-  color: #777;
   font-size: 11px;
   line-height: 1.5;
+  color: #555;
+  margin-top: 12px;
 }
 
 .siteFooter {
   margin-top: 35px;
   padding: 24px 5px 10px;
-  border-top: 1px solid #e3e3e3;
+  border-top: 1px solid #ddd;
   display: flex;
   justify-content: space-between;
-  align-items: center;
   gap: 20px;
   font-size: 12px;
   color: #888;
@@ -336,10 +450,53 @@ hr {
   color: #000;
 }
 
-@media(max-width: 700px) {
+@media(max-width: 900px) {
+  main {
+    grid-template-columns: 1fr;
+  }
+
+  aside {
+    position: static;
+  }
+
+  .paperArea {
+    min-height: 350px;
+  }
+}
+
+@media(max-width: 650px) {
+  .app {
+    padding: 15px;
+  }
+
+  header {
+    align-items: flex-start;
+  }
+
+  header > strong {
+    padding: 13px 10px;
+    font-size: 11px;
+  }
+
+  h1 {
+    font-size: 19px;
+  }
+
+  header p {
+    font-size: 12px;
+  }
+
   .trustBar {
-    gap: 10px 16px;
     justify-content: flex-start;
+    gap: 9px 15px;
+  }
+
+  .upload {
+    min-height: 470px;
+  }
+
+  .previewTop {
+    flex-direction: column;
   }
 
   .siteFooter {

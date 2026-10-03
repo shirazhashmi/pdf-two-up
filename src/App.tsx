@@ -1,7 +1,8 @@
 import { useRef, useState } from "react";
-import { PDFDocument } from "pdf-lib";
+import { PDFDocument, PDFPage } from "pdf-lib";
 import * as pdfjsLib from "pdfjs-dist";
 import pdfjsWorker from "pdfjs-dist/build/pdf.worker.min.mjs?url";
+import JSZip from "jszip";
 import "./App.css";
 
 pdfjsLib.GlobalWorkerOptions.workerSrc = pdfjsWorker;
@@ -13,15 +14,27 @@ type Crop = {
   height: number;
 };
 
+type BatchPdf = {
+  path: string;
+  name: string;
+  bytes: Uint8Array;
+};
+
+type SourceType = "pdf" | "zip" | null;
+
 const MM_TO_PT = 72 / 25.4;
 
 export default function App() {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
 
-  const [pdfBytes, setPdfBytes] = useState<Uint8Array | null>(null);
-  const [fileName, setFileName] = useState("");
-  const [pageCount, setPageCount] = useState(0);
+  const [sourceType, setSourceType] = useState<SourceType>(null);
+  const [sourceName, setSourceName] = useState("");
+  const [previewName, setPreviewName] = useState("");
 
+  const [pdfBytes, setPdfBytes] = useState<Uint8Array | null>(null);
+  const [batchFiles, setBatchFiles] = useState<BatchPdf[]>([]);
+
+  const [pageCount, setPageCount] = useState(0);
   const [pageWidth, setPageWidth] = useState(0);
   const [pageHeight, setPageHeight] = useState(0);
 
@@ -37,13 +50,9 @@ export default function App() {
 
   const [status, setStatus] = useState("");
   const [busy, setBusy] = useState(false);
+  const [progress, setProgress] = useState(0);
 
-  async function loadPDF(file: File) {
-    const bytes = new Uint8Array(await file.arrayBuffer());
-
-    setPdfBytes(bytes);
-    setFileName(file.name);
-
+  async function renderPreview(bytes: Uint8Array) {
     const pdf = await pdfjsLib.getDocument({
       data: bytes.slice(),
     }).promise;
@@ -51,37 +60,142 @@ export default function App() {
     setPageCount(pdf.numPages);
 
     const page = await pdf.getPage(1);
-
     const vp = page.getViewport({ scale: 1 });
 
     setPageWidth(vp.width);
     setPageHeight(vp.height);
 
     const scale = 800 / vp.width;
+    const viewport = page.getViewport({ scale });
 
-    const viewport = page.getViewport({
-      scale,
+    await new Promise((resolve) => setTimeout(resolve, 50));
+
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+
+    const ctx = canvas.getContext("2d", {
+      willReadFrequently: true,
     });
 
-    setTimeout(async () => {
-      const canvas = canvasRef.current;
-      if (!canvas) return;
+    if (!ctx) return;
 
-      const ctx = canvas.getContext("2d", {
-        willReadFrequently: true,
-      });
+    canvas.width = viewport.width;
+    canvas.height = viewport.height;
 
-      if (!ctx) return;
+    await page.render({
+      canvas,
+      canvasContext: ctx,
+      viewport,
+    }).promise;
+  }
 
-      canvas.width = viewport.width;
-      canvas.height = viewport.height;
+  async function loadInput(file: File) {
+    try {
+      setStatus("Reading file...");
+      setProgress(0);
 
-      await page.render({
-        canvas,
-        canvasContext: ctx,
-        viewport,
-      }).promise;
-    }, 50);
+      const lower = file.name.toLowerCase();
+
+      if (lower.endsWith(".pdf")) {
+        const bytes = new Uint8Array(await file.arrayBuffer());
+
+        setSourceType("pdf");
+        setSourceName(file.name);
+        setPreviewName(file.name);
+        setBatchFiles([]);
+        setPdfBytes(bytes);
+
+        await renderPreview(bytes);
+
+        setStatus("");
+        return;
+      }
+
+      if (lower.endsWith(".zip")) {
+        setStatus("Reading ZIP...");
+
+        const zip = await JSZip.loadAsync(file);
+
+        const entries = Object.values(zip.files).filter((entry) => {
+          const name = entry.name.toLowerCase();
+
+          return (
+            !entry.dir &&
+            name.endsWith(".pdf") &&
+            !name.startsWith("__macosx/") &&
+            !name.includes("/__macosx/")
+          );
+        });
+
+        if (entries.length === 0) {
+          throw new Error("No PDF files were found inside this ZIP.");
+        }
+
+        const files: BatchPdf[] = [];
+
+        for (let i = 0; i < entries.length; i++) {
+          const entry = entries[i];
+
+          setStatus(
+            `Loading PDF ${i + 1} of ${entries.length}: ${entry.name}`
+          );
+
+          const bytes = await entry.async("uint8array");
+
+          const pieces = entry.name.split("/");
+          const name = pieces[pieces.length - 1];
+
+          files.push({
+            path: entry.name,
+            name,
+            bytes,
+          });
+
+          setProgress(
+            Math.round(((i + 1) / entries.length) * 100)
+          );
+        }
+
+        setSourceType("zip");
+        setSourceName(file.name);
+        setBatchFiles(files);
+
+        setPdfBytes(files[0].bytes);
+        setPreviewName(files[0].name);
+
+        await renderPreview(files[0].bytes);
+
+        setProgress(0);
+        setStatus(`${files.length} PDFs found inside ZIP.`);
+
+        return;
+      }
+
+      throw new Error("Please select a PDF or ZIP file.");
+    } catch (error) {
+      console.error(error);
+
+      setStatus(
+        error instanceof Error
+          ? error.message
+          : "Could not read this file."
+      );
+
+      setSourceType(null);
+      setPdfBytes(null);
+      setBatchFiles([]);
+    }
+  }
+
+  function reset() {
+    setSourceType(null);
+    setSourceName("");
+    setPreviewName("");
+    setPdfBytes(null);
+    setBatchFiles([]);
+    setPageCount(0);
+    setStatus("");
+    setProgress(0);
   }
 
   function autoDetect() {
@@ -107,7 +221,6 @@ export default function App() {
     let minY = height;
     let maxX = 0;
     let maxY = 0;
-
     let found = false;
 
     for (let y = 0; y < height; y += 2) {
@@ -123,21 +236,22 @@ export default function App() {
 
           minX = Math.min(minX, x);
           minY = Math.min(minY, y);
-
           maxX = Math.max(maxX, x);
           maxY = Math.max(maxY, y);
         }
       }
     }
 
-    if (!found) return;
+    if (!found) {
+      setStatus("Could not automatically detect content.");
+      return;
+    }
 
     const px = width * 0.015;
     const py = height * 0.015;
 
     minX = Math.max(0, minX - px);
     minY = Math.max(0, minY - py);
-
     maxX = Math.min(width, maxX + px);
     maxY = Math.min(height, maxY + py);
 
@@ -148,183 +262,294 @@ export default function App() {
       height: ((maxY - minY) / height) * 100,
     });
 
-    setStatus("Content detected.");
+    setStatus(
+      sourceType === "zip"
+        ? "Content detected from the first PDF. These settings will be applied to every PDF in the ZIP."
+        : "Content detected."
+    );
   }
 
-  const cropW =
-    pageWidth * crop.width / 100;
+  const cropW = pageWidth * crop.width / 100;
+  const cropH = pageHeight * crop.height / 100;
 
-  const cropH =
-    pageHeight * crop.height / 100;
-
-  const marginPt =
-    margin * MM_TO_PT;
-
-  const spacingPt =
-    spacing * MM_TO_PT;
+  const marginPt = margin * MM_TO_PT;
+  const spacingPt = spacing * MM_TO_PT;
 
   const fits =
+    !!pdfBytes &&
     cropW <= pageWidth &&
-    cropH * 2 +
-      marginPt * 2 +
-      spacingPt <=
-      pageHeight;
+    cropH * 2 + marginPt * 2 + spacingPt <= pageHeight;
+
+  async function processPdf(
+    inputBytes: Uint8Array
+  ): Promise<Uint8Array> {
+    const source = await PDFDocument.load(
+      inputBytes.slice()
+    );
+
+    const output = await PDFDocument.create();
+    const pages = source.getPages();
+
+    function getCropBox(page: PDFPage) {
+      const { width, height } = page.getSize();
+
+      const left =
+        width * crop.left / 100;
+
+      const right =
+        width * (crop.left + crop.width) / 100;
+
+      const top =
+        height * (1 - crop.top / 100);
+
+      const bottom =
+        height *
+        (1 - (crop.top + crop.height) / 100);
+
+      return {
+        page,
+        width,
+        height,
+        left,
+        right,
+        top,
+        bottom,
+        cardWidth: right - left,
+        cardHeight: top - bottom,
+      };
+    }
+
+    for (let i = 0; i < pages.length; i += 2) {
+      const first = getCropBox(pages[i]);
+
+      const second =
+        i + 1 < pages.length
+          ? getCropBox(pages[i + 1])
+          : null;
+
+      const sheetWidth = first.width;
+      const sheetHeight = first.height;
+
+      const neededHeight = second
+        ? marginPt +
+          first.cardHeight +
+          spacingPt +
+          second.cardHeight +
+          marginPt
+        : marginPt +
+          first.cardHeight +
+          marginPt;
+
+      if (
+        first.cardWidth > sheetWidth ||
+        (second && second.cardWidth > sheetWidth) ||
+        neededHeight > sheetHeight
+      ) {
+        throw new Error(
+          `The selected crop does not fit at 100% size on pages ${i + 1}` +
+          (second ? ` and ${i + 2}.` : ".")
+        );
+      }
+
+      const sheet = output.addPage([
+        sheetWidth,
+        sheetHeight,
+      ]);
+
+      const embeddedFirst = await output.embedPage(
+        first.page,
+        {
+          left: first.left,
+          right: first.right,
+          top: first.top,
+          bottom: first.bottom,
+        }
+      );
+
+      const firstX =
+        (sheetWidth - first.cardWidth) / 2;
+
+      const firstY =
+        sheetHeight -
+        marginPt -
+        first.cardHeight;
+
+      sheet.drawPage(embeddedFirst, {
+        x: firstX,
+        y: firstY,
+        width: first.cardWidth,
+        height: first.cardHeight,
+      });
+
+      if (second) {
+        const embeddedSecond =
+          await output.embedPage(
+            second.page,
+            {
+              left: second.left,
+              right: second.right,
+              top: second.top,
+              bottom: second.bottom,
+            }
+          );
+
+        const secondX =
+          (sheetWidth - second.cardWidth) / 2;
+
+        const secondY =
+          firstY -
+          spacingPt -
+          second.cardHeight;
+
+        sheet.drawPage(embeddedSecond, {
+          x: secondX,
+          y: secondY,
+          width: second.cardWidth,
+          height: second.cardHeight,
+        });
+      }
+    }
+
+    return new Uint8Array(
+      await output.save()
+    );
+  }
+
+  function downloadBlob(
+    blob: Blob,
+    filename: string
+  ) {
+    const url = URL.createObjectURL(blob);
+
+    const a = document.createElement("a");
+
+    a.href = url;
+    a.download = filename;
+
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+
+    setTimeout(() => {
+      URL.revokeObjectURL(url);
+    }, 2000);
+  }
 
   async function generate() {
-    if (!pdfBytes) return;
+    if (!sourceType || !pdfBytes) return;
 
     try {
       setBusy(true);
-      setStatus("Generating...");
+      setProgress(0);
 
-      const source =
-        await PDFDocument.load(
-          pdfBytes.slice()
-        );
+      if (sourceType === "pdf") {
+        setStatus("Generating PDF...");
 
-      const output =
-        await PDFDocument.create();
+        const result =
+          await processPdf(pdfBytes);
 
-      const pages =
-        source.getPages();
+        const safeBytes = new Uint8Array(result);
 
-      for (
-        let i = 0;
-        i < pages.length;
-        i += 2
-      ) {
-        const size =
-          pages[i].getSize();
-
-        const sheet =
-          output.addPage([
-            size.width,
-            size.height,
-          ]);
-
-        async function place(
-          index: number,
-          row: number
-        ) {
-          const page =
-            pages[index];
-
-          const {
-            width,
-            height,
-          } = page.getSize();
-
-          const left =
-            width *
-            crop.left /
-            100;
-
-          const right =
-            width *
-            (crop.left + crop.width) /
-            100;
-
-          const top =
-            height *
-            (1 - crop.top / 100);
-
-          const bottom =
-            height *
-            (
-              1 -
-              (crop.top + crop.height) /
-              100
-            );
-
-          const cardWidth =
-            right - left;
-
-          const cardHeight =
-            top - bottom;
-
-          const embedded =
-            await output.embedPage(
-              page,
-              {
-                left,
-                right,
-                top,
-                bottom,
-              }
-            );
-
-          const x =
-            (size.width - cardWidth) / 2;
-
-          const fromTop =
-            marginPt +
-            row *
-              (
-                cardHeight +
-                spacingPt
-              );
-
-          const y =
-            size.height -
-            fromTop -
-            cardHeight;
-
-          sheet.drawPage(
-            embedded,
-            {
-              x,
-              y,
-              width: cardWidth,
-              height: cardHeight,
-            }
-          );
-        }
-
-        await place(i, 0);
-
-        if (i + 1 < pages.length) {
-          await place(i + 1, 1);
-        }
-      }
-
-      const result =
-        await output.save();
-
-      const blob =
-        new Blob(
-          [new Uint8Array(result)],
+        const blob = new Blob(
+          [safeBytes.buffer],
           {
             type: "application/pdf",
           }
         );
 
-      const url =
-        URL.createObjectURL(blob);
+        const outputName =
+          sourceName.replace(/\.pdf$/i, "") +
+          "-2-per-page.pdf";
 
-      const a =
-        document.createElement("a");
+        downloadBlob(blob, outputName);
 
-      a.href = url;
+        setProgress(100);
+        setStatus("Done. Your PDF has been downloaded.");
+        return;
+      }
 
-      a.download =
-        fileName.replace(
-          /\.pdf$/i,
-          ""
-        ) +
-        "-2-per-page.pdf";
+      const outputZip = new JSZip();
 
-      a.click();
+      for (let i = 0; i < batchFiles.length; i++) {
+        const file = batchFiles[i];
 
-      URL.revokeObjectURL(url);
+        setStatus(
+          `Processing ${i + 1} of ${batchFiles.length}: ${file.name}`
+        );
 
-      setStatus(
-        "Done! Your PDF has been downloaded."
+        try {
+          const result =
+            await processPdf(file.bytes);
+
+          const outputPath =
+            file.path.replace(
+              /\.pdf$/i,
+              "-2-per-page.pdf"
+            );
+
+          outputZip.file(
+            outputPath,
+            result
+          );
+        } catch (error) {
+          throw new Error(
+            `${file.name}: ${
+              error instanceof Error
+                ? error.message
+                : "Could not process PDF."
+            }`
+          );
+        }
+
+        setProgress(
+          Math.round(
+            ((i + 1) / batchFiles.length) * 90
+          )
+        );
+      }
+
+      setStatus("Creating output ZIP...");
+
+      const zipBlob =
+        await outputZip.generateAsync(
+          {
+            type: "blob",
+            compression: "DEFLATE",
+            compressionOptions: {
+              level: 6,
+            },
+          },
+          (metadata) => {
+            setProgress(
+              90 +
+              Math.round(
+                metadata.percent * 0.1
+              )
+            );
+          }
+        );
+
+      const outputName =
+        sourceName.replace(/\.zip$/i, "") +
+        "-processed.zip";
+
+      downloadBlob(
+        zipBlob,
+        outputName
       );
-    } catch (e) {
-      console.error(e);
+
+      setProgress(100);
 
       setStatus(
-        "Could not generate PDF."
+        `Done. ${batchFiles.length} PDFs processed and downloaded as ZIP.`
+      );
+    } catch (error) {
+      console.error(error);
+
+      setStatus(
+        error instanceof Error
+          ? error.message
+          : "Could not generate output."
       );
     } finally {
       setBusy(false);
@@ -335,7 +560,7 @@ export default function App() {
     label: string,
     value: number,
     max: number,
-    update: (n: number) => void
+    update: (value: number) => void
   ) {
     return (
       <label className="range">
@@ -347,7 +572,7 @@ export default function App() {
         <input
           type="range"
           min="0"
-          max={max}
+          max={Math.max(0, max)}
           step="0.2"
           value={value}
           onChange={(e) =>
@@ -360,7 +585,6 @@ export default function App() {
 
   return (
     <div className="app">
-
       <header>
         <strong>PDF 2-UP</strong>
 
@@ -374,8 +598,9 @@ export default function App() {
       </header>
 
       <div className="trustBar">
-        <span>🔒 Processed locally</span>
-        <span>☁️ No PDF uploads</span>
+        <span>🔒 Local processing</span>
+        <span>📄 PDF + ZIP supported</span>
+        <span>☁️ No uploads</span>
         <span>💾 Nothing stored</span>
 
         <a
@@ -387,76 +612,77 @@ export default function App() {
         </a>
       </div>
 
-      {!pdfBytes ? (
-
+      {!sourceType ? (
         <label className="upload">
-
           <div className="uploadIcon">
             ↑
           </div>
 
           <h2>
-            Upload PDF
+            Upload PDF or ZIP
           </h2>
 
           <p>
-            Page 1 + 2 → Sheet 1
+            PDF: process one file
           </p>
 
           <p>
-            Page 3 + 4 → Sheet 2
+            ZIP: process every PDF inside
           </p>
 
           <input
             type="file"
-            accept="application/pdf"
+            accept=".pdf,.zip,application/pdf,application/zip,application/x-zip-compressed"
             onChange={(e) => {
               const file =
                 e.target.files?.[0];
 
-              if (file)
-                loadPDF(file);
+              if (file) {
+                loadInput(file);
+              }
             }}
           />
 
           <div className="privacyNote">
-            <strong>Private by design</strong>
+            <strong>
+              Private by design
+            </strong>
+
             <span>
-              Your PDF is processed directly in your browser.
-              This app does not upload or store your document.
+              Files are processed directly on your device.
+              They are never uploaded to or stored on our servers.
             </span>
           </div>
-
         </label>
-
       ) : (
-
         <main>
-
           <section className="preview">
-
             <div className="previewTop">
               <div>
-                <h2>{fileName}</h2>
-                <p>{pageCount} pages</p>
+                <h2>{sourceName}</h2>
+
+                {sourceType === "pdf" ? (
+                  <p>
+                    {pageCount} pages
+                  </p>
+                ) : (
+                  <p>
+                    {batchFiles.length} PDFs detected · Previewing {previewName}
+                  </p>
+                )}
               </div>
 
               <button
-                onClick={() =>
-                  setPdfBytes(null)
-                }
+                onClick={reset}
+                disabled={busy}
               >
-                Change PDF
+                Change file
               </button>
             </div>
 
             <div className="paperArea">
-
               <div className="paper">
-
-                <canvas
-                  ref={canvasRef}
-                />
+                <canvas ref={canvasRef} />
 
                 <div
                   className="crop"
@@ -466,24 +692,55 @@ export default function App() {
                     width: crop.width + "%",
                     height: crop.height + "%",
                   }}
-                />
-
+                >
+                  <span>
+                    Content area
+                  </span>
+                </div>
               </div>
-
             </div>
-
           </section>
 
           <aside>
-
-            <h2>Layout</h2>
+            <h2>
+              Crop & Layout
+            </h2>
 
             <button
               className="detect"
               onClick={autoDetect}
+              disabled={busy}
             >
               Auto Detect Content
             </button>
+
+            {sourceType === "zip" && (
+              <div className="batchInfo">
+                <strong>
+                  Batch mode
+                </strong>
+
+                <p>
+                  These crop settings will be applied to all {batchFiles.length} PDFs.
+                </p>
+
+                <div className="fileList">
+                  {batchFiles
+                    .slice(0, 5)
+                    .map((file) => (
+                      <span key={file.path}>
+                        ✓ {file.name}
+                      </span>
+                    ))}
+
+                  {batchFiles.length > 5 && (
+                    <span>
+                      + {batchFiles.length - 5} more
+                    </span>
+                  )}
+                </div>
+              </div>
+            )}
 
             {range(
               "Top",
@@ -538,12 +795,11 @@ export default function App() {
 
               <input
                 type="number"
+                min="0"
                 value={margin}
                 onChange={(e) =>
                   setMargin(
-                    Number(
-                      e.target.value
-                    )
+                    Number(e.target.value)
                   )
                 }
               />
@@ -558,12 +814,11 @@ export default function App() {
 
               <input
                 type="number"
+                min="0"
                 value={spacing}
                 onChange={(e) =>
                   setSpacing(
-                    Number(
-                      e.target.value
-                    )
+                    Number(e.target.value)
                   )
                 }
               />
@@ -584,20 +839,45 @@ export default function App() {
             </div>
 
             <div className="info">
-              <b>Output</b>
+              <b>
+                Output logic
+              </b>
 
               <p>
-                PDF 1 + PDF 2
+                Page 1 + Page 2 → Sheet 1
               </p>
 
               <p>
-                PDF 3 + PDF 4
+                Page 3 + Page 4 → Sheet 2
               </p>
 
               <p>
-                PDF 5 + PDF 6
+                Page 5 + Page 6 → Sheet 3
               </p>
             </div>
+
+            {busy && (
+              <div className="progressWrap">
+                <div className="progressTop">
+                  <span>
+                    Processing
+                  </span>
+
+                  <strong>
+                    {progress}%
+                  </strong>
+                </div>
+
+                <div className="progressTrack">
+                  <div
+                    className="progressBar"
+                    style={{
+                      width: `${progress}%`,
+                    }}
+                  />
+                </div>
+              </div>
+            )}
 
             <button
               className="generate"
@@ -605,8 +885,12 @@ export default function App() {
               onClick={generate}
             >
               {busy
-                ? "Generating..."
-                : "Generate PDF"}
+                ? sourceType === "zip"
+                  ? "Processing ZIP..."
+                  : "Generating PDF..."
+                : sourceType === "zip"
+                  ? `Process ${batchFiles.length} PDFs & Download ZIP`
+                  : "Generate PDF"}
             </button>
 
             {status && (
@@ -614,9 +898,7 @@ export default function App() {
                 {status}
               </p>
             )}
-
           </aside>
-
         </main>
       )}
 

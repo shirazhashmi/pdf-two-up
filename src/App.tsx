@@ -77,6 +77,7 @@ export default function App() {
       canvas.height = viewport.height;
 
       await page.render({
+        canvas,
         canvasContext: ctx,
         viewport,
       }).promise;
